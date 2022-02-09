@@ -1,0 +1,25 @@
+{
+  "symbol": "XBTUSDT",
+  "baseCurrency": "XBT",
+  "quoteCurrency": "USDT",
+  "accountCurrency": "USDt",
+  "settlementCurrency": "USDt",
+  "leverage": 2.0,
+  "positionCurrency": "XBT",
+  "exchange": {
+    "isLive": false,
+    "apiKey": "JF8GR_27DIY_thNGjXorGVSV",
+  },
+  "strategy": {
+    "halfLife": 30,
+    "threshold": 2.0,
+    "perTradeUsage": 0.02
+  },
+  "execution": {
+    "maxDepth": 3,
+    "minTradeLots": 5,
+    "orderRatio": 0.2,
+    "renewAfterDuration": 60.0,
+    "renewAfterTradeLots": 60
+  }
+}
