@@ -430,6 +430,10 @@ class BitmexExchange:
         )
 
         def l2_order_book_tick_queue_putter(tick: L2OrderBookTick):
+            """
+            This func is assigned to self.ws.l2_order_book_tick_queue_putter so
+            data passed to engine
+            """
             engine.loop.call_soon_threadsafe(engine.l2_order_book_tick_queue.put_nowait, tick)
 
         self.ws = BitmexWebsocketEx(
@@ -530,7 +534,7 @@ class MomentumIndicatorNode(Node[MomentumIndicatorNodeConfig, MomentumIndicatorR
     def handle_ema_result(self, ema_result: ExponentialMovingAverageResult) -> None:
         momentum = ema_result.current_value - ema_result.mean
         assert ema_result.variance != 0 or momentum == 0
-        #significance = abs(math.sqrt(self.magic_constant / math.sqrt(ema_result.variance)) * momentum) if ema_result.variance != 0 else 0
+        # significance = abs(math.sqrt(self.magic_constant / math.sqrt(ema_result.variance)) * momentum) if ema_result.variance != 0 else 0
         significance = abs(math.sqrt(1 / (ema_result.variance)) * momentum) if ema_result.variance != 0 else 0
         self.publish_result(MomentumIndicatorResult(midpoint_price=ema_result.current_value, momentum=momentum, significance=significance))
 
@@ -592,6 +596,7 @@ class MomentumSignalNode(Node[MomentumSignalNodeConfig, Signal]):
                 MOMENTUM_SIGNAL_SIGNIFICANCE_THRESHOLD):
             logger.info(f'{partial_message}: No signal (due to insufficient significance).')
             return
+        # buy/sell signals published here
         if momentum > self.config.threshold:
             basis_points = previous_momentum.momentum / previous_momentum.midpoint_price * 10_000
             if basis_points > 1:
@@ -686,7 +691,7 @@ def get_config() -> tuple[int, Optional[Path], EngineConfig, BitmexExchangeConfi
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', nargs='?', default='config.json', type=argparse.FileType('r'))
     parser.add_argument('--verbose', '-v', action='count', default=0, dest='verbosity')
-    parser.add_argument('--log-file', nargs='?', type=Path)
+    parser.add_argument('--log-file', nargs='?', default='default.log', type=Path)  # output log content to ./default.log by default
     args = parser.parse_args()
 
     config = json.load(args.config)
@@ -702,7 +707,8 @@ def get_config() -> tuple[int, Optional[Path], EngineConfig, BitmexExchangeConfi
     exchange_config = BitmexExchangeConfig(
         is_live=config['exchange']['isLive'],
         api_key=config['exchange']['apiKey'],
-        api_secret=getpass(f'''Enter BitMEX API key secret (for ID `{config['exchange']['apiKey']}`): '''),
+        # api_secret=getpass(f'''Enter BitMEX API key secret (for ID `{config['exchange']['apiKey']}`): ''')  # ask for secret input from terminal
+        api_secret=config['exchange']['apiSecret']
     )
     strategy_config = MomentumStrategyConfig(
         half_life=config['strategy']['halfLife'],

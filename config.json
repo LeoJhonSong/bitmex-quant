@@ -9,10 +9,11 @@
   "exchange": {
     "isLive": false,
     "apiKey": "JF8GR_27DIY_thNGjXorGVSV",
+    "apiSecret": "GJVNC6JhPK3idX6IFBKy9D5KVS_1RJ2uTHEaGUz1jLOfuPIV"
   },
   "strategy": {
-    "halfLife": 30,
-    "threshold": 2.0,
+    "halfLife": 10,
+    "threshold": 0.1,
     "perTradeUsage": 0.02
   },
   "execution": {
