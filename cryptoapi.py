@@ -577,7 +577,6 @@ orderQty0 = 100
 bitmex_api_key = 'JF8GR_27DIY_thNGjXorGVSV'
 bitmex_api_secret = 'GJVNC6JhPK3idX6IFBKy9D5KVS_1RJ2uTHEaGUz1jLOfuPIV'
 client = bitmex.bitmex(api_key=bitmex_api_key, api_secret=bitmex_api_secret)
-orderState = [False, None]  # is_ordered -> bool, order_signal -> [None, Signal]
 ################################################################################
 
 
@@ -631,20 +630,29 @@ class MomentumSignalNode(Node[MomentumSignalNodeConfig, Signal]):
         else:
             logger.info(f'{partial_message}: No signal (due to unbreached threshold).')
             signal = None
-        global orderState  # use global var orderState
+        positions = client.Position.Position_get(filter=json.dumps({'symbol': 'XBTUSD'})).result()[0][0]  # to get 'isOpen', 'currentQty'
         if signal in [Signal.BUY, Signal.SELL]:
-            if not orderState[0]:  # when no order
-                orderState = [True, signal]
+            if not positions['isOpen']:  # when no position
+                # cancel all open orders (for TrailingStopPeg orders cancelling)
+                client.Order.Order_cancelAll().result()
+                logger.info('All stop market order cancelled.')
+                # create orders
                 marketOrder = client.Order.Order_new(symbol=symbol0, orderQty=signal * orderQty0, ordType=ordType0).result()  # a market type order
                 logger.info(f'Create {signal.name} market order of orderID {marketOrder[0]["orderID"][0:7]} and orderQty is {marketOrder[0]["orderQty"]}')
                 stopOrder = client.Order.Order_new(symbol=symbol0, orderQty=-signal * orderQty0, pegOffsetValue=-signal * pegOffsetValue0, pegPriceType='TrailingStopPeg', ordType='Stop', execInst='LastPrice').result()  # a stop market type order
                 logger.info(f'Create {signal.name} stop market order of orderID {stopOrder[0]["orderID"][0:7]}')
-            elif signal != orderState[1]:  # when ordered, and diff signal (BUT/SELL for now) appears
-                orderState = [False, None]
-                client.Order.Order_cancelAll().result()  # cancel all open orders (for TrailingStopPeg orders cancelling)
+            elif signal != math.copysign(1, positions['currentQty']):  # when position opened, and signal (BUT/SELL for now) different from side of current position
+                # cancel all open orders (for TrailingStopPeg orders cancelling)
+                client.Order.Order_cancelAll().result()
                 logger.info('All stop market order cancelled.')
-                client.Order.Order_closePosition(symbol=symbol0).result()  # close all market type orders
+                # close all market type orders
+                client.Order.Order_closePosition(symbol=symbol0).result()
                 logger.info('All market order closed.')
+                # create opposite orders
+                marketOrder = client.Order.Order_new(symbol=symbol0, orderQty=signal * orderQty0, ordType=ordType0).result()  # a market type order
+                logger.info(f'Create {signal.name} market order of orderID {marketOrder[0]["orderID"][0:7]} and orderQty is {marketOrder[0]["orderQty"]}')
+                stopOrder = client.Order.Order_new(symbol=symbol0, orderQty=-signal * orderQty0, pegOffsetValue=-signal * pegOffsetValue0, pegPriceType='TrailingStopPeg', ordType='Stop', execInst='LastPrice').result()  # a stop market type order
+                logger.info(f'Create {signal.name} stop market order of orderID {stopOrder[0]["orderID"][0:7]}')
 
 
 
@@ -725,7 +733,7 @@ def get_config() -> tuple[int, Optional[Path], EngineConfig, BitmexExchangeConfi
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', nargs='?', default='config.json', type=argparse.FileType('r'))
     parser.add_argument('--verbose', '-v', action='count', default=0, dest='verbosity')
-    parser.add_argument('--log-file', nargs='?', default='default.log', type=Path)  # output log content to ./default.log by default
+    parser.add_argument('--log-file', nargs='?', default='record.log', type=Path)  # output log content to ./record.log by default
     args = parser.parse_args()
 
     config = json.load(args.config)
