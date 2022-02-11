@@ -1,0 +1,15 @@
+{
+    "editor.rulers": [
+        80,
+        300
+    ],
+    "python.linting.pycodestyleArgs": [
+        "--max-line-length=300",
+        "--ignore=E402"
+    ],
+    "python.formatting.autopep8Args": [
+        "--max-line-lengt=300",
+        "--aggressive",
+        "--aggressive"
+    ],
+}

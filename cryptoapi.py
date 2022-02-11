@@ -8,7 +8,7 @@ import argparse
 import asyncio
 from collections import defaultdict, deque
 from dataclasses import dataclass
-from enum import Enum
+from enum import IntEnum
 from getpass import getpass
 import json
 import logging
@@ -92,7 +92,7 @@ def assert_ticker_extended_symbol(value: Any) -> str:
 # Types
 ########################################################################################################################
 
-class Signal(Enum):
+class Signal(IntEnum):
     BUY = 1
     SELL = -1
     CLOSE = 0
@@ -564,7 +564,21 @@ class WindowedPairNode(Node[WindowedPairNodeConfig, tuple[NRT, NRT]]):
             self.publish_result((value, self.values[0]))
 
 
-MOMENTUM_SIGNAL_SIGNIFICANCE_THRESHOLD = 3.
+################################################################################
+# execution dirty workaround config
+################################################################################
+MOMENTUM_SIGNAL_SIGNIFICANCE_THRESHOLD = 1.2
+# symbol0 = 'XBTUSDT'
+symbol0 = 'XBTUSD'
+ordType0 = 'Market'
+pegPriceType0 = 'TrailingStopPeg'
+pegOffsetValue0 = 100
+orderQty0 = 100
+bitmex_api_key = 'JF8GR_27DIY_thNGjXorGVSV'
+bitmex_api_secret = 'GJVNC6JhPK3idX6IFBKy9D5KVS_1RJ2uTHEaGUz1jLOfuPIV'
+client = bitmex.bitmex(api_key=bitmex_api_key, api_secret=bitmex_api_secret)
+orderState = [False, None]  # is_ordered -> bool, order_signal -> [None, Signal]
+################################################################################
 
 
 @dataclass(frozen=True)
@@ -585,15 +599,15 @@ class MomentumSignalNode(Node[MomentumSignalNodeConfig, Signal]):
     def __init__(self, engine: 'Engine', config: MomentumSignalNodeConfig) -> None:
         super().__init__(engine, config)
         momentum_indicator_node_config = MomentumIndicatorNodeConfig(half_life=config.half_life)
-        windowed_pair_node_config = WindowedPairNodeConfig(node_config=momentum_indicator_node_config, n=(config.half_life + 1))
+        windowed_pair_node_config = WindowedPairNodeConfig(node_config=momentum_indicator_node_config, n=1)
         engine.subscribe_node_result(windowed_pair_node_config, self.handle_momenta)
 
     def handle_momenta(self, momenta: tuple[MomentumIndicatorResult, MomentumIndicatorResult]):
         (current_momentum, previous_momentum) = momenta
         momentum = (current_momentum.momentum / previous_momentum.momentum) if previous_momentum.momentum != 0 else 0
         partial_message = f'[Current (MPP, momentum, significance) is ({current_momentum.midpoint_price}, {current_momentum.momentum}, {current_momentum.significance}). Past is ({previous_momentum.midpoint_price}, {previous_momentum.momentum}, {previous_momentum.significance}).]'
-        if not (current_momentum.significance > MOMENTUM_SIGNAL_SIGNIFICANCE_THRESHOLD and previous_momentum.significance >
-                MOMENTUM_SIGNAL_SIGNIFICANCE_THRESHOLD):
+        # if not (current_momentum.significance > MOMENTUM_SIGNAL_SIGNIFICANCE_THRESHOLD and previous_momentum.significance > MOMENTUM_SIGNAL_SIGNIFICANCE_THRESHOLD):
+        if not (current_momentum.significance > MOMENTUM_SIGNAL_SIGNIFICANCE_THRESHOLD):
             logger.info(f'{partial_message}: No signal (due to insufficient significance).')
             return
         # buy/sell signals published here
@@ -602,16 +616,36 @@ class MomentumSignalNode(Node[MomentumSignalNodeConfig, Signal]):
             if basis_points > 1:
                 logger.info(f'{partial_message}: BUY signal!')
                 self.publish_result(Signal.BUY)
+                signal = Signal.BUY
             elif basis_points < -1:
                 logger.info(f'{partial_message}: SELL signal!')
                 self.publish_result(Signal.SELL)
+                signal = Signal.SELL
             else:
                 logger.info(f'{partial_message}: No signal (due to insufficient movement).')
+                signal = None
         elif (current_momentum.momentum * previous_momentum.momentum) < 0:
             logger.info(f'{partial_message}: CLOSE signal!')
             self.publish_result(Signal.CLOSE)
+            signal = Signal.CLOSE
         else:
             logger.info(f'{partial_message}: No signal (due to unbreached threshold).')
+            signal = None
+        global orderState  # use global var orderState
+        if signal in [Signal.BUY, Signal.SELL]:
+            if not orderState[0]:  # when no order
+                orderState = [True, signal]
+                marketOrder = client.Order.Order_new(symbol=symbol0, orderQty=signal * orderQty0, ordType=ordType0).result()  # a market type order
+                logger.info(f'Create {signal.name} market order of orderID {marketOrder[0]["orderID"][0:7]} and orderQty is {marketOrder[0]["orderQty"]}')
+                stopOrder = client.Order.Order_new(symbol=symbol0, orderQty=-signal * orderQty0, pegOffsetValue=-signal * pegOffsetValue0, pegPriceType='TrailingStopPeg', ordType='Stop', execInst='LastPrice').result()  # a stop market type order
+                logger.info(f'Create {signal.name} stop market order of orderID {stopOrder[0]["orderID"][0:7]}')
+            elif signal != orderState[1]:  # when ordered, and diff signal (BUT/SELL for now) appears
+                orderState = [False, None]
+                client.Order.Order_cancelAll().result()  # cancel all open orders (for TrailingStopPeg orders cancelling)
+                logger.info('All stop market order cancelled.')
+                client.Order.Order_closePosition(symbol=symbol0).result()  # close all market type orders
+                logger.info('All market order closed.')
+
 
 
 @dataclass(frozen=True)

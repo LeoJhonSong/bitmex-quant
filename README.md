@@ -1,0 +1,4 @@
+- [bitemex入门教程](https://medium.com/coinmonks/a-bitmex-python-tutorial-5f3cdf2491a7)
+- [bitmex包github官方文档](https://github.com/BitMEX/api-connectors/tree/master/official-http/python-swaggerpy)
+- [testnet API测试工具](https://testnet.bitmex.com/api/explorer/)
+- [websocket API文档](https://www.bitmex.com/app/wsAPI)
