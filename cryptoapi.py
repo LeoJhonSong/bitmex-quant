@@ -630,7 +630,10 @@ class MomentumSignalNode(Node[MomentumSignalNodeConfig, Signal]):
         else:
             logger.info(f'{partial_message}: No signal (due to unbreached threshold).')
             signal = None
-        positions = client.Position.Position_get(filter=json.dumps({'symbol': 'XBTUSD'})).result()[0][0]  # to get 'isOpen', 'currentQty'
+        try:
+            positions = client.Position.Position_get(filter=json.dumps({'symbol': 'XBTUSD'})).result()[0][0]  # to get 'isOpen', 'currentQty'
+        except IndexError:
+            positions = {'isOpen': False, 'currentQty': 0}
         if signal in [Signal.BUY, Signal.SELL]:
             if not positions['isOpen']:  # when no position
                 # cancel all open orders (for TrailingStopPeg orders cancelling)
